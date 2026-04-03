@@ -1,0 +1,16 @@
+{
+  "name": "pyscape-ui",
+  "version": "0.1.0",
+  "description": "Multi-agent experiment & observability console",
+  "private": true,
+  "workspaces": [
+    "packages/frontend",
+    "packages/backend",
+    "packages/agent-service"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces",
+    "build": "npm run build --workspaces",
+    "start": "npm start --workspaces"
+  }
+}
