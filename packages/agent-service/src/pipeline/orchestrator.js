@@ -2,6 +2,7 @@ const Planner = require('../agents/Planner');
 const Generator = require('../agents/Generator');
 const Critic = require('../agents/Critic');
 const Refiner = require('../agents/Refiner');
+const Validator = require('../agents/Validator');
 
 /**
  * Orchestrator runs the multi-agent pipeline
@@ -91,14 +92,61 @@ class Orchestrator {
               feedback: evaluation.feedback,
               iteration,
             });
+
+            // Validate refined output
+            const validation = await Validator.validate({
+              lesson_input,
+              output,
+              iteration: `${iteration}-refined`,
+            });
+
+            // If validation fails and iterations remaining, try Refiner again with validation feedback
+            if (!validation.is_valid && iteration < max_iterations - 1) {
+              console.log(
+                `[${job_id}] Iteration ${iteration} validation failed, attempting refinement with validation feedback`
+              );
+              output = await Refiner.refine({
+                output,
+                feedback: {
+                  ...evaluation.feedback,
+                  validation_issues: validation.failed_checks,
+                  validation_report: validation.report,
+                },
+                iteration: `${iteration}-validation-fix`,
+              });
+            }
+
+            // Re-validate after optional second refinement
+            const final_validation = await Validator.validate({
+              lesson_input,
+              output,
+              iteration: `${iteration}-final`,
+            });
+
+            // Store validation result in iteration trace
+            iteration_trace[iteration_trace.length - 1].validation = final_validation;
+          } else {
+            // No refiner: validate raw generator output
+            const validation = await Validator.validate({
+              lesson_input,
+              output,
+              iteration,
+            });
+            iteration_trace[iteration_trace.length - 1].validation = validation;
           }
         } else {
           // No critic, use default score
+          const validation = await Validator.validate({
+            lesson_input,
+            output,
+            iteration,
+          });
           iteration_trace.push({
             iteration,
             score,
             consistency_flag: false,
             metrics: { clarity: 0.5, correctness: 0.5, pedagogy: 0.5, pass_rate: 0, quality: 0.5 },
+            validation,
           });
         }
 

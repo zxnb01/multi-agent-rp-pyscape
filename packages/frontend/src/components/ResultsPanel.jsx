@@ -7,7 +7,9 @@ export default function ResultsPanel() {
   const { finalOutput, metrics, iterations } = useJob();
   const [expandedSections, setExpandedSections] = useState({
     output: true,
+    source: false,
     metrics: true,
+    validation: false,
     graph: true,
   });
 
@@ -88,6 +90,52 @@ export default function ResultsPanel() {
                     : JSON.stringify(sourceContext.plan, null, 2)}
                 </pre>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Validation Report */}
+      {iterations && iterations.length > 0 && iterations[iterations.length - 1].validation && (
+        <div className="border rounded-lg">
+          <button
+            onClick={() => toggleSection('validation')}
+            className="w-full p-3 bg-gray-100 hover:bg-gray-200 font-semibold text-left flex justify-between items-center"
+          >
+            <span>✓ Validation Report</span>
+            <span>{expandedSections.validation ? '▼' : '▶'}</span>
+          </button>
+          {expandedSections.validation && (
+            <div className="p-4 bg-white space-y-3 text-sm">
+              {(() => {
+                const validation = iterations[iterations.length - 1].validation;
+                const statusColor = validation.is_valid ? 'text-green-600' : 'text-red-600';
+                return (
+                  <>
+                    <div className={`font-semibold ${statusColor}`}>
+                      Status: {validation.is_valid ? '✅ VALID' : '❌ INVALID'}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>Checks Passed: {validation.checks_passed}</div>
+                      <div>Checks Failed: {validation.checks_failed}</div>
+                      <div>Pass Rate: {(validation.pass_rate * 100).toFixed(1)}%</div>
+                    </div>
+                    {validation.failed_checks && validation.failed_checks.length > 0 && (
+                      <div className="mt-2">
+                        <h4 className="font-semibold text-red-600 mb-1">Failed Checks:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-red-600">
+                          {validation.failed_checks.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs whitespace-pre-wrap break-words">
+                      {validation.report}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
