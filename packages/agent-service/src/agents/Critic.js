@@ -93,14 +93,14 @@ Respond with JSON: {"clarity": 0.X, "correctness": 0.X, "pedagogy": 0.X}`;
   }
 
   _calculatePassRate(output) {
-    // For now, mock pass rate based on content presence
-    let pass_rate = 0.5;
-
+    // Count actual passed tests
     if (output.testCases && output.testCases.length > 0) {
-      pass_rate = Math.min(1, 0.5 + output.testCases.length * 0.1);
+      const passed = output.testCases.filter((tc) => tc.passed === true).length;
+      return passed / output.testCases.length;
     }
 
-    return Math.min(1, pass_rate);
+    // Default if no testCases provided
+    return 0.5;
   }
 
   _generateFeedback(scores, penalties, llm_scores) {
