@@ -7,7 +7,7 @@ exports.getResults = async (req, res) => {
   try {
     const { job_id } = req.params;
 
-    // Get job to check status
+    // Get job to check status and extract system_type
     const job = await supabaseClient.getJobById(job_id);
 
     if (job.status !== 'completed') {
@@ -24,6 +24,7 @@ exports.getResults = async (req, res) => {
     res.json({
       job_id,
       status: job.status,
+      system_type: job.config?.system_type || 'multi_agent',
       final_output: results.final_output,
       metrics: results.metrics,
       iteration_trace: results.iteration_trace,

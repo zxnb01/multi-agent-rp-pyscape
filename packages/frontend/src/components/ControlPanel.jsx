@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useJob } from '../context/JobContext';
 
 export default function ControlPanel() {
-  const { createJob, resetJob, status, loading } = useJob();
+  const { createJob, resetJob, status, loading, systemType, setSystemType } = useJob();
 
   const [lessonInput, setLessonInput] = useState({
     title: 'Regular Expressions',
@@ -13,7 +13,6 @@ export default function ControlPanel() {
   });
 
   const [config, setConfig] = useState({
-    system_type: 'multi_agent',
     max_iterations: 3,
     quality_threshold: 0.85,
     use_critic: true,
@@ -44,6 +43,10 @@ export default function ControlPanel() {
     }
   };
 
+  const handleSystemTypeChange = (newMode) => {
+    setSystemType(newMode);
+  };
+
   const handleRunJob = async () => {
     await createJob(lessonInput, config);
   };
@@ -58,6 +61,12 @@ export default function ControlPanel() {
       skill_id: 'skill-123',
     });
   };
+
+  // Determine which ablations to show based on systemType
+  const shouldShowCritic = systemType === 'multi_agent';
+  const shouldShowRefiner = systemType === 'multi_agent';
+  const shouldShowMemory = systemType === 'multi_agent';
+  const showIterationControl = systemType === 'multi_agent' || systemType === 'pipeline';
 
   return (
     <div className="space-y-4">
@@ -86,71 +95,124 @@ export default function ControlPanel() {
         </select>
       </div>
 
-      {/* System Selection */}
+      {/* Mode Selection */}
       <div className="border-b pb-4">
-        <h3 className="font-semibold mb-2">System Type</h3>
-        <select
-          value={config.system_type}
-          onChange={(e) => handleConfigChange('system_type', e.target.value)}
-          disabled={isRunning}
-          className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100"
-        >
-          <option value="single_llm">Single LLM</option>
-          <option value="pipeline">Pipeline</option>
-          <option value="multi_agent">Multi-agent</option>
-        </select>
+        <h3 className="font-semibold mb-3">Execution Mode</h3>
+        <div className="space-y-2">
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="radio"
+              name="mode"
+              value="single_llm"
+              checked={systemType === 'single_llm'}
+              onChange={(e) => handleSystemTypeChange(e.target.value)}
+              disabled={isRunning}
+              className="disabled:opacity-50"
+            />
+            <span className="flex-1">
+              <span className="font-medium">Single LLM</span>
+              <p className="text-xs text-gray-500">Direct generation (no planning)</p>
+            </span>
+          </label>
+
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="radio"
+              name="mode"
+              value="pipeline"
+              checked={systemType === 'pipeline'}
+              onChange={(e) => handleSystemTypeChange(e.target.value)}
+              disabled={isRunning}
+              className="disabled:opacity-50"
+            />
+            <span className="flex-1">
+              <span className="font-medium">Pipeline</span>
+              <p className="text-xs text-gray-500">Planner → Generator → Validator</p>
+            </span>
+          </label>
+
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="radio"
+              name="mode"
+              value="multi_agent"
+              checked={systemType === 'multi_agent'}
+              onChange={(e) => handleSystemTypeChange(e.target.value)}
+              disabled={isRunning}
+              className="disabled:opacity-50"
+            />
+            <span className="flex-1">
+              <span className="font-medium">Multi-Agent</span>
+              <p className="text-xs text-gray-500">Full iterative loop with Critic/Refiner</p>
+            </span>
+          </label>
+        </div>
       </div>
 
-      {/* Toggles */}
-      <div className="border-b pb-4">
-        <h3 className="font-semibold mb-2">Ablations</h3>
-        <label className="flex items-center space-x-2 mb-2">
-          <input
-            type="checkbox"
-            checked={config.use_critic}
-            onChange={(e) => handleConfigChange('use_critic', e.target.checked)}
-            disabled={isRunning}
-            className="disabled:opacity-50"
-          />
-          <span>Use Critic</span>
-        </label>
-        <label className="flex items-center space-x-2 mb-2">
-          <input
-            type="checkbox"
-            checked={config.use_refiner}
-            onChange={(e) => handleConfigChange('use_refiner', e.target.checked)}
-            disabled={isRunning}
-            className="disabled:opacity-50"
-          />
-          <span>Use Refiner</span>
-        </label>
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={config.use_memory}
-            onChange={(e) => handleConfigChange('use_memory', e.target.checked)}
-            disabled={isRunning}
-            className="disabled:opacity-50"
-          />
-          <span>Use Memory</span>
-        </label>
-      </div>
+      {/* Ablation Controls - Mode-Specific */}
+      {(shouldShowCritic || shouldShowRefiner || shouldShowMemory) && (
+        <div className="border-b pb-4">
+          <h3 className="font-semibold mb-2">Ablations</h3>
+          {shouldShowCritic && (
+            <label className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                checked={config.use_critic}
+                onChange={(e) => handleConfigChange('use_critic', e.target.checked)}
+                disabled={isRunning}
+                className="disabled:opacity-50"
+              />
+              <span>Use Critic</span>
+            </label>
+          )}
+          {shouldShowRefiner && (
+            <label className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                checked={config.use_refiner}
+                onChange={(e) => handleConfigChange('use_refiner', e.target.checked)}
+                disabled={isRunning}
+                className="disabled:opacity-50"
+              />
+              <span>Use Refiner</span>
+            </label>
+          )}
+          {shouldShowMemory && (
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={config.use_memory}
+                onChange={(e) => handleConfigChange('use_memory', e.target.checked)}
+                disabled={isRunning}
+                className="disabled:opacity-50"
+              />
+              <span>Use Memory</span>
+            </label>
+          )}
+        </div>
+      )}
 
-      {/* Config Parameters */}
+      {/* Config Parameters - Mode-Specific */}
       <div className="border-b pb-4">
         <h3 className="font-semibold mb-2">Parameters</h3>
-        <label className="block mb-2">
-          <span className="text-sm">Max Iterations</span>
-          <input
-            type="number"
-            min="1"
-            max="10"
-            value={config.max_iterations}
-            onChange={(e) => handleConfigChange('max_iterations', e.target.value)}
-            disabled={isRunning}
-            className="w-full px-3 py-2 border border-gray-300 rounded mt-1 disabled:bg-gray-100"
-          />
-        </label>
+
+        {showIterationControl && (
+          <label className="block mb-2">
+            <span className="text-sm">
+              Max Iterations {systemType === 'pipeline' || systemType === 'single_llm' ? '(fixed to 1)' : ''}
+            </span>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={config.max_iterations}
+              onChange={(e) => handleConfigChange('max_iterations', e.target.value)}
+              disabled={isRunning || systemType !== 'multi_agent'}
+              className="w-full px-3 py-2 border border-gray-300 rounded mt-1 disabled:bg-gray-100"
+            />
+          </label>
+        )}
+
         <label className="block">
           <span className="text-sm">Quality Threshold</span>
           <input

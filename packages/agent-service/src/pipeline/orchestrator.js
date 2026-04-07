@@ -5,12 +5,196 @@ const Refiner = require('../agents/Refiner');
 const Validator = require('../agents/Validator');
 
 /**
- * Orchestrator runs the multi-agent pipeline
- * Planner -> Generator -> Critic -> Refiner loop
+ * Orchestrator: Mode-aware multi-agent pipeline
+ * Branches by system_type:
+ *   - single_llm: Generator (no planning) -> Validator (deterministic gate)
+ *   - pipeline: Planner -> Generator (single pass) -> Validator
+ *   - multi_agent: Planner -> Generator loop with Critic/Refiner -> Validator
  * Returns: final_output, metrics, iteration_trace
  */
 class Orchestrator {
   async run({ job_id, lesson_input, config }) {
+    const { system_type = 'multi_agent' } = config;
+
+    // Dispatch to mode-specific pipeline
+    switch (system_type) {
+      case 'single_llm':
+        return this._orchestrate_single_llm({ job_id, lesson_input, config });
+      case 'pipeline':
+        return this._orchestrate_pipeline({ job_id, lesson_input, config });
+      case 'multi_agent':
+        return this._orchestrate_multi_agent({ job_id, lesson_input, config });
+      default:
+        throw new Error(`Invalid system_type: ${system_type}`);
+    }
+  }
+
+  /**
+   * single_llm: Direct generation without planning or iteration
+   * Generator -> Validator (deterministic gate)
+   */
+  async _orchestrate_single_llm({ job_id, lesson_input, config }) {
+    const { quality_threshold = 0.85 } = config;
+
+    console.log(`[${job_id}] Starting single_llm pipeline (no Planner, one-shot generation)`);
+
+    try {
+      // Single generation pass (no planning, no loop)
+      const generated = await Generator.generate({
+        lesson_input,
+        plan: null, // No plan in single_llm
+        iteration: 0,
+        memory: {},
+      });
+
+      const output = generated.output;
+      const score = generated.score || 0.5;
+
+      console.log(`[${job_id}] single_llm generation complete, score: ${score.toFixed(3)}`);
+
+      // Deterministic validation gate
+      const validation = await Validator.validate({
+        lesson_input,
+        output,
+        iteration: 0,
+      });
+
+      console.log(`[${job_id}] single_llm validation: ${validation.is_valid ? 'PASS' : 'FAIL'}`);
+
+      // Single iteration trace for single_llm
+      const iteration_trace = [
+        {
+          iteration: 0,
+          score,
+          consistency_flag: false,
+          metrics: { clarity: 0.5, correctness: 0.5, pedagogy: 0.5, pass_rate: validation.pass_rate || 0, quality: score },
+          validation,
+        },
+      ];
+
+      // Minimal metrics for single_llm
+      const final_metrics = {
+        quality_score: score,
+        pass_rate: validation.pass_rate || 0,
+        total_latency: 0,
+        tokens_used: 0,
+        iterations: 1,
+      };
+
+      const result = {
+        job_id,
+        status: 'completed',
+        final_output: {
+          lesson: output,
+          source_context: {
+            lesson_input,
+            plan: null,
+            config,
+            iteration_trace,
+          },
+        },
+        metrics: final_metrics,
+        iteration_trace,
+      };
+
+      console.log(`[${job_id}] single_llm pipeline completed`);
+      return result;
+    } catch (error) {
+      console.error(`[${job_id}] single_llm pipeline failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * pipeline: Structured but non-iterative flow
+   * Planner -> Generator (single pass) -> Validator
+   * No Critic/Refiner iteration, strictly one-shot
+   */
+  async _orchestrate_pipeline({ job_id, lesson_input, config }) {
+    const { quality_threshold = 0.85 } = config;
+
+    console.log(`[${job_id}] Starting pipeline (Planner -> Generator -> Validator, one-shot)`);
+
+    try {
+      // Phase 1: Planner generates initial plan
+      const plan = await Planner.plan(lesson_input);
+      console.log(`[${job_id}] Pipeline plan generated`);
+
+      // Phase 2: Single Generator pass
+      const generated = await Generator.generate({
+        lesson_input,
+        plan,
+        iteration: 0,
+        memory: {},
+      });
+
+      let output = generated.output;
+      const score = generated.score || 0.5;
+
+      console.log(`[${job_id}] Pipeline generation complete, score: ${score.toFixed(3)}`);
+
+      // Phase 3: Validation gate (no Refiner)
+      const validation = await Validator.validate({
+        lesson_input,
+        output,
+        iteration: 0,
+      });
+
+      console.log(`[${job_id}] Pipeline validation: ${validation.is_valid ? 'PASS' : 'FAIL'}`);
+
+      // Single iteration trace
+      const iteration_trace = [
+        {
+          iteration: 0,
+          score,
+          consistency_flag: false,
+          metrics: { clarity: 0.5, correctness: 0.5, pedagogy: 0.5, pass_rate: validation.pass_rate || 0, quality: score },
+          validation,
+        },
+      ];
+
+      // Standard metrics (no iteration trace variance)
+      const final_metrics = {
+        quality_score: score,
+        clarity: 0.5,
+        correctness: 0.5,
+        pedagogy: 0.5,
+        pass_rate: validation.pass_rate || 0,
+        iterations: 1,
+        total_latency: 0,
+        tokens_used: 0,
+      };
+
+      const result = {
+        job_id,
+        status: 'completed',
+        final_output: {
+          lesson: output,
+          source_context: {
+            lesson_input,
+            plan,
+            config,
+            iteration_trace,
+          },
+        },
+        metrics: final_metrics,
+        iteration_trace,
+      };
+
+      console.log(`[${job_id}] Pipeline completed with final score: ${score.toFixed(3)}`);
+      return result;
+    } catch (error) {
+      console.error(`[${job_id}] Pipeline failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * multi_agent: Full iterative loop with Critic/Refiner
+   * Planner -> (Generator -> Critic -> Refiner) loop -> Validator
+   * Original behavior retained
+   */
+  async _orchestrate_multi_agent({ job_id, lesson_input, config }) {
     const {
       max_iterations = 3,
       quality_threshold = 0.85,
@@ -24,7 +208,7 @@ class Orchestrator {
     let best_output = null;
     let best_score = 0;
 
-    console.log(`[${job_id}] Starting pipeline with config:`, config);
+    console.log(`[${job_id}] Starting multi_agent pipeline with config:`, config);
 
     try {
       // Phase 1: Planner generates initial plan
@@ -173,10 +357,10 @@ class Orchestrator {
         iteration_trace,
       };
 
-      console.log(`[${job_id}] Pipeline completed with final score: ${best_score.toFixed(3)}`);
+      console.log(`[${job_id}] multi_agent pipeline completed with final score: ${best_score.toFixed(3)}`);
       return result;
     } catch (error) {
-      console.error(`[${job_id}] Pipeline failed:`, error);
+      console.error(`[${job_id}] multi_agent pipeline failed:`, error);
       throw error;
     }
   }

@@ -2,19 +2,44 @@ import React, { useState } from 'react';
 import { useJob } from '../context/JobContext';
 
 export default function ExecutionTrace() {
-  const { iterations, status } = useJob();
+  const { iterations, status, systemType } = useJob();
   const [expandedValidation, setExpandedValidation] = useState(null);
 
   if (!iterations || iterations.length === 0) {
     return <p className="text-gray-500">Waiting for iterations...</p>;
   }
 
+  // Render pipeline header based on systemType
+  const getPipelineHeader = () => {
+    switch (systemType) {
+      case 'single_llm':
+        return 'Generator → Validator';
+      case 'pipeline':
+        return 'Planner → Generator → Validator';
+      case 'multi_agent':
+      default:
+        return 'Planner → Generator → Critic → Refiner → Validator';
+    }
+  };
+
+  // Determine if this is a minimal mode (for layout hints)
+  const isMinimalMode = systemType === 'single_llm' || systemType === 'pipeline';
+
   return (
     <div className="space-y-3">
-      {/* Pipeline stages header */}
+      {/* Pipeline stages header - Mode-aware */}
       <div className="flex justify-between items-center text-sm font-semibold text-gray-600 pb-2 border-b">
-        <span>Pipeline Stages</span>
-        <span>Planner → Generator → Critic → Refiner → Validator</span>
+        <span>
+          {isMinimalMode ? (
+            <span className="inline-block px-2 py-1 bg-gray-100 rounded text-xs mr-2">
+              {systemType === 'single_llm' ? 'Single LLM' : 'Pipeline'}
+            </span>
+          ) : (
+            <span className="inline-block px-2 py-1 bg-purple-100 rounded text-xs mr-2">Multi-Agent</span>
+          )}
+          Pipeline Stages
+        </span>
+        <span className="text-gray-700 font-mono text-xs">{getPipelineHeader()}</span>
       </div>
 
       {/* Iterations list */}
@@ -33,7 +58,7 @@ export default function ExecutionTrace() {
             >
               <div className="flex justify-between items-center mb-2">
                 <span className="font-semibold text-gray-800">
-                  Iteration {iteration.iteration}
+                  {isMinimalMode ? 'Generation' : `Iteration ${iteration.iteration}`}
                 </span>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-600">
@@ -49,20 +74,32 @@ export default function ExecutionTrace() {
                 </div>
               </div>
 
-              <div className="flex gap-4 text-xs text-gray-600">
-                <span>{improvement} Delta: {delta}</span>
-                {iteration.consistency_flag && (
-                  <span className="text-yellow-600 font-semibold">⚠️ Unstable</span>
-                )}
-              </div>
+              {/* Delta and consistency info - only for multi_agent */}
+              {systemType === 'multi_agent' && (
+                <div className="flex gap-4 text-xs text-gray-600">
+                  <span>{improvement} Delta: {delta}</span>
+                  {iteration.consistency_flag && (
+                    <span className="text-yellow-600 font-semibold">⚠️ Unstable</span>
+                  )}
+                </div>
+              )}
 
               {/* Metrics details */}
               {iteration.metrics && (
                 <div className="mt-2 text-xs grid grid-cols-2 gap-2 bg-white p-2 rounded">
-                  <span>Clarity: {iteration.metrics.clarity?.toFixed(3)}</span>
-                  <span>Correctness: {iteration.metrics.correctness?.toFixed(3)}</span>
-                  <span>Pedagogy: {iteration.metrics.pedagogy?.toFixed(3)}</span>
-                  <span>Pass Rate: {iteration.metrics.pass_rate?.toFixed(3)}</span>
+                  {systemType === 'multi_agent' ? (
+                    <>
+                      <span>Clarity: {iteration.metrics.clarity?.toFixed(3)}</span>
+                      <span>Correctness: {iteration.metrics.correctness?.toFixed(3)}</span>
+                      <span>Pedagogy: {iteration.metrics.pedagogy?.toFixed(3)}</span>
+                      <span>Pass Rate: {iteration.metrics.pass_rate?.toFixed(3)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Quality: {iteration.metrics.quality?.toFixed(3)}</span>
+                      <span>Pass Rate: {iteration.metrics.pass_rate?.toFixed(3)}</span>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -92,9 +129,9 @@ export default function ExecutionTrace() {
       {/* Status indicator */}
       <div className="mt-4 p-2 text-sm bg-blue-50 text-blue-800 rounded">
         {status === 'running' ? (
-          <span>⏱️ Job running... ({iterations.length} iterations)</span>
+          <span>⏱️ Job running... ({iterations.length} iteration{iterations.length !== 1 ? 's' : ''})</span>
         ) : (
-          <span>✓ Completed ({iterations.length} iterations)</span>
+          <span>✓ Completed ({iterations.length} iteration{iterations.length !== 1 ? 's' : ''})</span>
         )}
       </div>
     </div>

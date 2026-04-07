@@ -38,6 +38,25 @@ app.post('/execute', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Agent service listening on port ${PORT}`);
 });
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Stop the existing agent-service process or set PORT to a free port.`);
+    process.exit(1);
+  }
+
+  throw error;
+});
+
+const shutdown = (signal) => {
+  console.log(`Received ${signal}, closing agent service...`);
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
